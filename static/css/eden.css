@@ -1,0 +1,230 @@
+/* === eden.css === */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #030a05; /* 暗黑背景 */
+    color: #e0e0e0;
+    overflow-x: hidden;
+}
+
+/* --- 漢堡選單 --- */
+.sidebar-wrapper {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 1000;
+}
+
+.hamburger-btn {
+    font-size: 28px;
+    padding: 15px;
+    cursor: pointer;
+    position: relative; 
+    z-index: 1001;
+    color: #20f050;
+    text-shadow: 0 0 8px #20f050;
+    transition: color 0.3s;
+}
+
+.hamburger-btn:hover { color: #ffffff; }
+
+.side-menu {
+    position: absolute;
+    top: 0;
+    left: -250px;
+    width: 220px;
+    height: 100vh;
+    background-color: rgba(5, 15, 8, 0.95);
+    border-right: 1px solid #104020;
+    padding-top: 60px;
+    box-shadow: 4px 0 15px rgba(32, 240, 80, 0.2);
+    display: flex;
+    flex-direction: column;
+    transition: left 0.3s ease; 
+}
+
+.sidebar-wrapper:hover .side-menu { left: 0; }
+
+.side-menu a {
+    text-decoration: none;
+    color: #a0d0b0;
+    padding: 18px 25px;
+    border-bottom: 1px solid #104020;
+    font-weight: bold;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+}
+
+.side-menu a:hover {
+    background-color: #0a2012; 
+    color: #20f050;
+    padding-left: 30px;
+    text-shadow: 0 0 8px #20f050;
+}
+
+/* --- 主要內容區塊 --- */
+.main-content {
+    margin-left: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 40px;
+    min-height: 100vh;
+}
+
+/* --- 頂部 Icon --- */
+.top-header {
+    width: 100%;
+    display: flex;
+    justify-content: center; 
+    padding-top: 10px;
+    margin-bottom: 30px;
+}
+
+.header-icon {
+    width: 120px; /* 控制 Logo 大小 */
+    height: auto;
+    border-radius: 50%;
+    box-shadow: 0 0 15px rgba(32, 240, 80, 0.4);
+}
+
+/* --- 最新消息區塊 (參考截圖風格) --- */
+.news-section {
+    width: 100%;
+    max-width: 1000px;
+    background-color: rgba(10, 25, 15, 0.6); 
+    border: 1px solid #104020;
+    border-radius: 8px;
+    padding: 30px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+/* 最新消息標題列 */
+.news-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #154525;
+    padding-bottom: 15px;
+    margin-bottom: 25px;
+}
+
+.news-header h2 {
+    margin: 0;
+    color: #e0e0e0;
+    font-size: 28px;
+    letter-spacing: 2px;
+}
+
+.news-header .slash {
+    color: #20f050;
+    text-shadow: 0 0 5px #20f050;
+    margin-left: 10px;
+}
+
+/* 查看更多按鈕 */
+.view-more-btn {
+    color: #20f050;
+    text-decoration: none;
+    border: 1px solid #20f050;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: all 0.3s;
+}
+
+.view-more-btn:hover {
+    background-color: #20f050;
+    color: #030a05;
+    box-shadow: 0 0 10px #20f050;
+}
+
+/* 消息列表網格 (兩兩並排) */
+.news-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 25px;
+}
+
+.news-item {
+    display: flex;
+    align-items: flex-start;
+    padding: 10px;
+    transition: background-color 0.3s;
+    border-radius: 6px;
+}
+
+.news-item:hover {
+    background-color: rgba(32, 240, 80, 0.05); /* 滑鼠移過去微微發亮 */
+}
+
+/* 日期框設計 */
+.news-date {
+    border: 1px solid #20f050;
+    border-radius: 4px;
+    text-align: center;
+    width: 55px;
+    flex-shrink: 0;
+    margin-right: 20px;
+    overflow: hidden;
+    box-shadow: 0 0 5px rgba(32, 240, 80, 0.2);
+}
+
+.news-date .month {
+    background-color: #20f050;
+    color: #030a05;
+    font-size: 14px;
+    font-weight: bold;
+    padding: 3px 0;
+}
+
+.news-date .day {
+    color: #20f050;
+    font-size: 22px;
+    font-weight: bold;
+    padding: 5px 0;
+    background-color: #051008;
+}
+
+/* 內容與標籤 */
+.news-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.tags {
+    margin-bottom: 8px;
+}
+
+.tag {
+    font-size: 12px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    margin-right: 8px;
+    display: inline-block;
+}
+
+.tag.important {
+    background-color: #d93025; /* 紅色底的「重要」標籤 */
+    color: white;
+}
+
+.tag.normal {
+    border: 1px solid #20f050; /* 綠色框線標籤 */
+    color: #20f050;
+}
+
+.news-title {
+    color: #e0e0e0;
+    text-decoration: none;
+    font-size: 16px;
+    line-height: 1.4;
+    transition: color 0.3s;
+}
+
+.news-title:hover {
+    color: #20f050;
+}

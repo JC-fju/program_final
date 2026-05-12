@@ -3,32 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>超酷網站</title>
-    <!-- 載入 CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>EDEN - 社群平台</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/eden.css') }}">
 </head>
 <body>
 
-    <!-- 用一個外層容器包住按鈕和選單 -->
     <div class="sidebar-wrapper">
-        
-        <!-- 漢堡按鈕 -->
         <div class="hamburger-btn">☰</div>
-
-        <!-- 側邊長方形選單 -->
         <nav class="side-menu">
-            <a href="#">首頁</a>
-            <a href="#">關於我們</a>
-            <a href="#">成果展示</a>
-            <a href="#">聯絡我們</a>
+            <a href="{{ url_for('home') }}">首頁 HOME</a>
+            <a href="{{ url_for('about') }}">關於我們 ABOUT</a>
+            <a href="{{ url_for('achievements') }}">成果展示 ACHIEVEMENTS</a>
+            <a href="{{ url_for('contact') }}">聯絡我們 CONTACT</a>
         </nav>
-        
     </div>
 
-    <!-- 網頁的假內容，讓你看得出選單是浮在上面的 -->
-    <div style="margin-left: 60px; padding: 20px;">
-        <h1>超酷網站</h1>
-        <img src="{{ url_for('static', filename='image/icon.webp') }}" width="300">
+    <div class="main-content">
+        
+        <div class="top-header">
+            <img src="{{ url_for('static', filename='image/icon.webp') }}" alt="EDEN Icon" class="header-icon">
+        </div>
+
+        <div class="news-section">
+            <div class="news-header">
+                <h2>最新消息 <span class="slash">//</span></h2>
+                <a href="#" class="view-more-btn">查看更多</a>
+            </div>
+            
+            <div class="news-grid">
+                
+                <div class="news-item">
+                    <div class="news-date">
+                        <div class="month">5月</div>
+                        <div class="day">12</div>
+                    </div>
+                    <div class="news-content">
+                        <div class="tags">
+                            <span class="tag important">重要</span>
+                            <span class="tag normal">系統公告</span>
+                        </div>
+                        <a href="#" class="news-title">EDEN 社群平台正式上線測試與注意事項</a>
+                    </div>
+                </div>
+                
+                <div class="news-item">
+                    <div class="news-date">
+                        <div class="month">4月</div>
+                        <div class="day">20</div>
+                    </div>
+                    <div class="news-content">
+                        <div class="tags">
+                            <span class="tag important">重要</span>
+                            <span class="tag normal">活動公告</span>
+                        </div>
+                        <a href="#" class="news-title">AI 輔助數學證明工作坊 - 報名資訊公告</a>
+                    </div>
+                </div>
+
+                <div class="news-item">
+                    <div class="news-date">
+                        <div class="month">3月</div>
+                        <div class="day">30</div>
+                    </div>
+                    <div class="news-content">
+                        <div class="tags">
+                            <span class="tag normal">社群活動</span>
+                        </div>
+                        <a href="#" class="news-title">第一屆 EDEN 網頁開發交流會報到時間表</a>
+                    </div>
+                </div>
+
+                <div class="news-item">
+                    <div class="news-date">
+                        <div class="month">5月</div>
+                        <div class="day">06</div>
+                    </div>
+                    <div class="news-content">
+                        <div class="tags">
+                            <span class="tag normal">演講公告</span>
+                        </div>
+                        <a href="#" class="news-title">科技與數學的結合：邊緣運算實作分享</a>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+        
     </div>
 
 </body>
