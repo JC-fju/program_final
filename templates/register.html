@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>EDEN - 註冊新帳號</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/eden.css') }}">
+    <style>
+        .auth-container { max-width: 400px; margin: 100px auto; padding: 30px; background: rgba(10, 25, 15, 0.8); border: 1px solid #104020; border-radius: 8px; text-align: center; }
+        .auth-input { width: 100%; padding: 10px; margin: 10px 0; background: #051008; border: 1px solid #20f050; color: #e0e0e0; border-radius: 4px; box-sizing: border-box; }
+        .auth-btn { width: 100%; padding: 12px; background: #20f050; border: none; color: #030a05; font-weight: bold; border-radius: 4px; cursor: pointer; margin-top: 15px; }
+        .auth-btn:hover { box-shadow: 0 0 10px #20f050; }
+        .auth-link { color: #a0d0b0; text-decoration: none; display: inline-block; margin-top: 15px; font-size: 14px; }
+        .auth-link:hover { color: #20f050; }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <h2 style="color: #e0e0e0; letter-spacing: 2px;">註冊 EDEN 帳號</h2>
+        <form method="POST">
+            <input type="text" name="username" class="auth-input" placeholder="請輸入使用者名稱" required autocomplete="off">
+            <input type="password" name="password" class="auth-input" placeholder="請輸入密碼" required>
+            <button type="submit" class="auth-btn">確認註冊</button>
+        </form>
+        <a href="{{ url_for('login') }}" class="auth-link">已有帳號？前往登入</a>
+    </div>
+</body>
+</html>
