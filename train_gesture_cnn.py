@@ -283,12 +283,12 @@ def main():
     print("🚀 開始訓練 CNN 模型...")
 
     class_weight = {
-        0: 1.1,
+        0: 1.0,
         1: 1.0,
         2: 1.0,
         3: 1.0,
         4: 1.0,
-        5: 1.1,
+        5: 1.0,
     }
     print("⚖️  Class weights:", class_weight)
 
