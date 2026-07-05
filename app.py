@@ -81,9 +81,9 @@ class User(db.Model):
     username = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
     avatar_url = db.Column(db.String(200), nullable=True)
+    bio = db.Column(db.Text, nullable=True)  # 新增：自我介紹
     posts = db.relationship('Post', backref='author', lazy=True)
     replies = db.relationship('Reply', backref='author', lazy=True)
-
 # 3. 論壇貼文模型
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -380,11 +380,20 @@ def reply(post_id):
     return redirect(url_for("forum") + f"#post-{post_id}")
 
 
-@app.route("/profile/<username>")
+@app.route("/profile/<username>", methods=["GET", "POST"])
 def profile(username):
     if "user_id" not in session:
         return redirect(url_for("login"))
+
     user = User.query.filter_by(username=username).first_or_404()
+
+    # 只有本人才能編輯自己的自我介紹
+    if request.method == "POST" and session["user_id"] == user.id:
+        new_bio = request.form.get("bio", "").strip()
+        user.bio = new_bio
+        db.session.commit()
+        return redirect(url_for("profile", username=username))
+
     posts = Post.query.filter_by(user_id=user.id).order_by(Post.created_at.desc()).all()
     return render_template("profile.html", profile_user=user, posts=posts,
                            current_user=session.get("username"))
@@ -418,3 +427,4 @@ def contact(): return render_template("contact.html")
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", debug=True, port=port)
+

@@ -57,6 +57,35 @@
         .profile-stats span { margin-right: 20px; }
         .profile-stats strong { color: #20f050; }
 
+        .profile-bio {
+        color: #c0d8c8; font-size: 14px; line-height: 1.6;
+        margin-top: 10px; white-space: pre-line;
+        }
+        .profile-bio.empty { color: #3a7050; font-style: italic; }
+
+        .bio-edit-btn {
+            background: none; border: 1px solid #3a7050; color: #3a7050;
+            font-size: 12px; padding: 3px 10px; border-radius: 4px;
+            cursor: pointer; margin-top: 8px; transition: all 0.2s;
+        }
+        .bio-edit-btn:hover { background: #3a7050; color: white; }
+
+        .bio-edit-area {
+            width: 100%; min-height: 80px; margin-top: 10px;
+            background: #051008; border: 1px solid #20f050;
+            color: #e0e0e0; padding: 10px; border-radius: 4px;
+            resize: vertical; font-size: 14px; box-sizing: border-box;
+        }
+        .bio-save-btn {
+            background: #20f050; color: #030a05; border: none;
+            padding: 6px 16px; border-radius: 4px; cursor: pointer;
+            font-size: 13px; margin-top: 8px; margin-right: 6px;
+        }
+        .bio-cancel-btn {
+            background: none; color: #a0d0b0; border: 1px solid #3a7050;
+            padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 13px;
+        }
+
         /* 貼文列表（複用 forum 樣式） */
         .section-title {
             color: #e0e0e0; font-size: 18px; letter-spacing: 1px;
@@ -90,8 +119,18 @@
             transition: color 0.2s;
         }
         .back-btn:hover { color: #20f050; }
+
     </style>
 </head>
+<script>
+function toggleBioEdit() {
+    const display = document.getElementById('bio-display');
+    const editForm = document.getElementById('bio-edit-form');
+    const isEditing = editForm.style.display !== 'none';
+    display.style.display = isEditing ? 'block' : 'none';
+    editForm.style.display = isEditing ? 'none' : 'block';
+}
+</script>
 <body>
     <div class="sidebar-wrapper">
         <div class="hamburger-btn">☰</div>
@@ -136,10 +175,34 @@
 
                 <div class="profile-info">
                     <div class="profile-username">@{{ profile_user.username }}</div>
-                    <div class="profile-stats">
-                        <span>貼文 <strong>{{ posts|length }}</strong></span>
-                    </div>
-                </div>
+                        <div class="profile-stats">
+                            <span>貼文 <strong>{{ posts|length }}</strong></span>
+    </div>
+
+    <!-- 自我介紹：一般顯示 -->
+    <div id="bio-display">
+        <p class="profile-bio{% if not profile_user.bio %} empty{% endif %}">
+            {{ profile_user.bio or '這位使用者還沒有寫自我介紹。' }}
+        </p>
+        {% if current_user == profile_user.username %}
+        <button type="button" class="bio-edit-btn" onclick="toggleBioEdit()">✏️ 編輯自我介紹</button>
+        {% endif %}
+    </div>
+
+    <!-- 自我介紹：編輯模式（預設隱藏，只有本人看得到） -->
+    {% if current_user == profile_user.username %}
+    <div id="bio-edit-form" style="display:none; margin-top:10px;">
+        <form method="POST">
+            <textarea name="bio" class="bio-edit-area"
+                      placeholder="寫點自我介紹，讓大家認識你吧...">{{ profile_user.bio or '' }}</textarea>
+            <div>
+                <button type="submit" class="bio-save-btn">儲存</button>
+                <button type="button" class="bio-cancel-btn" onclick="toggleBioEdit()">取消</button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+</div>
             </div>
 
             <!-- 貼文列表 -->
