@@ -13,6 +13,7 @@ from tensorflow.keras.models import load_model
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename # 新增：用來過濾危險的檔案名稱
 from dotenv import load_dotenv
+from apscheduler.schedulers.background import BackgroundScheduler
 
 
 
@@ -191,11 +192,14 @@ with app.app_context():
 # --- 網頁路由處理 ---
 
 last_scrape_time = 0
-scrape_status = "idle"   # idle | running | done
+scrape_status = "idle"
 
 
 def run_scraper_background():
     global last_scrape_time, scrape_status
+    if scrape_status == "running":
+        print("⚠️ 爬蟲已在執行中，略過")
+        return
     scrape_status = "running"
     try:
         from fju_scraper import run_scraper
@@ -208,33 +212,43 @@ def run_scraper_background():
         scrape_status = "done"
 
 
+# APScheduler 每 12 小時自動爬一次
+scheduler = BackgroundScheduler()
+scheduler.add_job(
+    func=run_scraper_background,
+    trigger="interval",
+    hours=12,
+    id="scraper_job",
+    replace_existing=True,
+)
+scheduler.start()
+print("⏰ 排程爬蟲已啟動，每 12 小時自動執行")
+
+# 啟動時立刻爬一次
+def initial_scrape():
+    time.sleep(5)
+    run_scraper_background()
+
+threading.Thread(target=initial_scrape, daemon=True).start()
+
+
 @app.route("/scrape_status")
 def scrape_status_api():
     return jsonify({"status": scrape_status})
 
 
+@app.route("/scrape_now", methods=["POST"])
+def scrape_now():
+    """手動觸發爬蟲（測試用）"""
+    threading.Thread(target=run_scraper_background, daemon=True).start()
+    return jsonify({"message": "爬蟲已啟動"})
+
+
 @app.route("/")
 def home():
-    global last_scrape_time, scrape_status
-    current_time = time.time()
-
-    if current_time - last_scrape_time > 3600 and scrape_status != "running":
-        scrape_status = "running"
-        t = threading.Thread(target=run_scraper_background, daemon=True)
-        t.start()
-        print("🚀 背景爬蟲啟動")
-    else:
-        print("⚡ 讀取資料庫快取，略過爬蟲")
-
-    # 所有新聞依日期新到舊排序（date 格式 yyyy-mm-dd 可直接字串排序）
     all_news = News.query.order_by(News.date.desc(), News.id.desc()).all()
-
-    # 所有不重複的 tag，供前端篩選
     tags = sorted(set(n.tag for n in all_news))
-
-    # 論壇最新 3 篇（未登入也能看預覽）
     latest_posts = Post.query.order_by(Post.created_at.desc()).limit(3).all()
-
     return render_template("index.html",
                            news_list=all_news,
                            tags=tags,

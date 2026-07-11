@@ -10,3 +10,4 @@ Pillow
 tensorflow-cpu
 werkzeug
 gunicorn
+apscheduler
