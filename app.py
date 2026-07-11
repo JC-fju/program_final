@@ -13,7 +13,6 @@ from tensorflow.keras.models import load_model
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename # 新增：用來過濾危險的檔案名稱
 from dotenv import load_dotenv
-from apscheduler.schedulers.background import BackgroundScheduler
 
 
 
@@ -82,7 +81,9 @@ class User(db.Model):
     username = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
     avatar_url = db.Column(db.String(200), nullable=True)
-    bio = db.Column(db.Text, nullable=True)  # 新增：自我介紹
+    bio = db.Column(db.Text, nullable=True)
+    security_question = db.Column(db.String(200), nullable=True)   # 安全提問
+    security_answer_hash = db.Column(db.String(200), nullable=True) # 答案雜湊
     posts = db.relationship('Post', backref='author', lazy=True)
     replies = db.relationship('Reply', backref='author', lazy=True)
 # 3. 論壇貼文模型
@@ -192,14 +193,11 @@ with app.app_context():
 # --- 網頁路由處理 ---
 
 last_scrape_time = 0
-scrape_status = "idle"
+scrape_status = "idle"   # idle | running | done
 
 
 def run_scraper_background():
     global last_scrape_time, scrape_status
-    if scrape_status == "running":
-        print("⚠️ 爬蟲已在執行中，略過")
-        return
     scrape_status = "running"
     try:
         from fju_scraper import run_scraper
@@ -212,43 +210,33 @@ def run_scraper_background():
         scrape_status = "done"
 
 
-# APScheduler 每 12 小時自動爬一次
-scheduler = BackgroundScheduler()
-scheduler.add_job(
-    func=run_scraper_background,
-    trigger="interval",
-    hours=12,
-    id="scraper_job",
-    replace_existing=True,
-)
-scheduler.start()
-print("⏰ 排程爬蟲已啟動，每 12 小時自動執行")
-
-# 啟動時立刻爬一次
-def initial_scrape():
-    time.sleep(5)
-    run_scraper_background()
-
-threading.Thread(target=initial_scrape, daemon=True).start()
-
-
 @app.route("/scrape_status")
 def scrape_status_api():
     return jsonify({"status": scrape_status})
 
 
-@app.route("/scrape_now", methods=["POST"])
-def scrape_now():
-    """手動觸發爬蟲（測試用）"""
-    threading.Thread(target=run_scraper_background, daemon=True).start()
-    return jsonify({"message": "爬蟲已啟動"})
-
-
 @app.route("/")
 def home():
+    global last_scrape_time, scrape_status
+    current_time = time.time()
+
+    if current_time - last_scrape_time > 3600 and scrape_status != "running":
+        scrape_status = "running"
+        t = threading.Thread(target=run_scraper_background, daemon=True)
+        t.start()
+        print("🚀 背景爬蟲啟動")
+    else:
+        print("⚡ 讀取資料庫快取，略過爬蟲")
+
+    # 所有新聞依日期新到舊排序（date 格式 yyyy-mm-dd 可直接字串排序）
     all_news = News.query.order_by(News.date.desc(), News.id.desc()).all()
+
+    # 所有不重複的 tag，供前端篩選
     tags = sorted(set(n.tag for n in all_news))
+
+    # 論壇最新 3 篇（未登入也能看預覽）
     latest_posts = Post.query.order_by(Post.created_at.desc()).limit(3).all()
+
     return render_template("index.html",
                            news_list=all_news,
                            tags=tags,
@@ -260,15 +248,26 @@ def register():
     if request.method == "POST":
         username = request.form.get("username")
         password = request.form.get("password")
+        security_question = request.form.get("security_question", "").strip()
+        security_answer   = request.form.get("security_answer", "").strip().lower()
 
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
             return render_template("register.html", error="帳號已存在，請換一個名字！")
 
+        if not security_question or not security_answer:
+            return render_template("register.html", error="請選擇安全提問並填寫答案！")
+
         hashed_pw = generate_password_hash(password)
-        new_user = User(username=username, password_hash=hashed_pw)
+        hashed_ans = generate_password_hash(security_answer)
+        new_user = User(
+            username=username,
+            password_hash=hashed_pw,
+            security_question=security_question,
+            security_answer_hash=hashed_ans,
+        )
         db.session.add(new_user)
-        db.session.flush()   # 先取得 user.id 再處理頭像
+        db.session.flush()
 
         file = request.files.get("avatar")
         if file and allowed_file(file.filename):
@@ -282,6 +281,101 @@ def register():
         return redirect(url_for("login"))
 
     return render_template("register.html", error=None)
+
+
+# 安全提問清單（前後端共用）
+SECURITY_QUESTIONS = [
+    "你父親的出生地？",
+    "你母親的出生地？",
+    "你小時候養的第一隻寵物名字？",
+    "你就讀的第一所小學名稱？",
+    "你最喜歡的老師姓名？",
+    "你父親的駕照後四碼？",
+    "你母親的駕照後四碼？",
+    "你的出生醫院名稱？",
+    "你第一份工作的公司名稱？",
+    "你最好的朋友的名字？",
+    "你小時候最喜歡的食物？",
+    "你父母相識的城市？",
+]
+
+
+@app.route("/forgot_password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "POST":
+        step = request.form.get("step", "1")
+
+        if step == "1":
+            # 第一步：輸入帳號，回傳該帳號的安全提問
+            username = request.form.get("username", "").strip()
+            user = User.query.filter_by(username=username).first()
+            if not user or not user.security_question:
+                return render_template("forgot_password.html",
+                                       step=1,
+                                       error="找不到此帳號或帳號未設定安全提問",
+                                       questions=SECURITY_QUESTIONS)
+            return render_template("forgot_password.html",
+                                   step=2,
+                                   username=username,
+                                   questions=SECURITY_QUESTIONS)
+
+        elif step == "2":
+            # 第二步：驗證安全提問和答案
+            username         = request.form.get("username", "").strip()
+            chosen_question  = request.form.get("security_question", "").strip()
+            answer           = request.form.get("security_answer", "").strip().lower()
+
+            user = User.query.filter_by(username=username).first()
+
+            # 故意不區分「帳號錯誤」和「提問/答案錯誤」，增加安全性
+            if (not user
+                    or not user.security_question
+                    or user.security_question != chosen_question
+                    or not check_password_hash(user.security_answer_hash, answer)):
+                return render_template("forgot_password.html",
+                                       step=2,
+                                       username=username,
+                                       error="帳號、安全提問或答案不正確",
+                                       questions=SECURITY_QUESTIONS)
+
+            return render_template("forgot_password.html",
+                                   step=3,
+                                   username=username,
+                                   question=chosen_question,
+                                   answer_token=generate_password_hash(answer + username))
+
+        elif step == "3":
+            # 第三步：重設密碼
+            username     = request.form.get("username", "").strip()
+            new_password = request.form.get("new_password", "").strip()
+            confirm_pw   = request.form.get("confirm_password", "").strip()
+            answer_token = request.form.get("answer_token", "")
+
+            if new_password != confirm_pw:
+                return render_template("forgot_password.html",
+                                       step=3,
+                                       username=username,
+                                       error="兩次輸入的密碼不一致",
+                                       answer_token=answer_token)
+
+            if len(new_password) < 4:
+                return render_template("forgot_password.html",
+                                       step=3,
+                                       username=username,
+                                       error="密碼至少需要 4 個字元",
+                                       answer_token=answer_token)
+
+            user = User.query.filter_by(username=username).first()
+            if not user:
+                return redirect(url_for("login"))
+
+            user.password_hash = generate_password_hash(new_password)
+            db.session.commit()
+            return redirect(url_for("login"))
+
+    return render_template("forgot_password.html",
+                           step=1,
+                           questions=SECURITY_QUESTIONS)
 
 @app.route("/login", methods=["GET", "POST"])
 def login():

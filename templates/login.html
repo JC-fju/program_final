@@ -6,22 +6,18 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/eden.css') }}">
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='image/favicon.ico') }}">
     <style>
-        /* 建議加上 body 的邊距歸零與背景色，讓畫面與首頁風格保持一致 */
         body { margin: 0; padding: 0; background-color: #030a05; font-family: sans-serif; }
-
         .auth-container { max-width: 400px; margin: 100px auto; padding: 30px; background: rgba(10, 25, 15, 0.8); border: 1px solid #104020; border-radius: 8px; text-align: center; }
         .auth-input { width: 100%; padding: 10px; margin: 10px 0; background: #051008; border: 1px solid #20f050; color: #e0e0e0; border-radius: 4px; box-sizing: border-box; }
         .auth-btn { width: 100%; padding: 12px; background: #20f050; border: none; color: #030a05; font-weight: bold; border-radius: 4px; cursor: pointer; margin-top: 15px; }
         .auth-btn:hover { box-shadow: 0 0 10px #20f050; }
         .auth-link { color: #a0d0b0; text-decoration: none; display: inline-block; margin-top: 15px; font-size: 14px; }
         .auth-link:hover { color: #20f050; }
-        
-        /* 將錯誤訊息的樣式獨立出來，讓 HTML 看起來更乾淨 */
         .error-msg { color: #ff4d4d; background: rgba(255, 77, 77, 0.1); border: 1px solid #ff4d4d; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 14px; }
+        .link-row { display: flex; justify-content: space-between; margin-top: 15px; }
     </style>
 </head>
 <body>
-
     <div class="sidebar-wrapper">
         <div class="hamburger-btn">☰</div>
         <nav class="side-menu">
@@ -35,11 +31,9 @@
 
     <div class="auth-container">
         <h2 style="color: #e0e0e0; letter-spacing: 2px;">會員登入</h2>
-        
+
         {% if error %}
-            <div class="error-msg">
-                {{ error }}
-            </div>
+        <div class="error-msg">{{ error }}</div>
         {% endif %}
 
         <form method="POST">
@@ -47,8 +41,11 @@
             <input type="password" name="password" class="auth-input" placeholder="密碼" required>
             <button type="submit" class="auth-btn">登入平台</button>
         </form>
-        
-        <a href="{{ url_for('register') }}" class="auth-link">還沒有帳號？點此註冊</a>
+
+        <div class="link-row">
+            <a href="{{ url_for('register') }}" class="auth-link">還沒有帳號？點此註冊</a>
+            <a href="{{ url_for('forgot_password') }}" class="auth-link">忘記密碼？</a>
+        </div>
     </div>
 </body>
 </html>

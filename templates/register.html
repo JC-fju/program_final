@@ -7,62 +7,34 @@
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='image/favicon.ico') }}">
     <style>
         .auth-container {
-            max-width: 400px; margin: 100px auto; padding: 30px;
+            max-width: 420px; margin: 60px auto; padding: 30px;
             background: rgba(10, 25, 15, 0.8);
             border: 1px solid #104020; border-radius: 8px; text-align: center;
         }
-
-        .auth-input {
-            width: 100%; padding: 10px; margin: 10px 0;
+        .auth-input, .auth-select {
+            width: 100%; padding: 10px; margin: 8px 0;
             background: #051008; border: 1px solid #20f050;
             color: #e0e0e0; border-radius: 4px; box-sizing: border-box;
         }
-
+        .auth-select { cursor: pointer; }
+        .auth-select option { background: #051008; }
         .auth-btn {
             width: 100%; padding: 12px; background: #20f050;
             border: none; color: #030a05; font-weight: bold;
             border-radius: 4px; cursor: pointer; margin-top: 15px;
         }
         .auth-btn:hover { box-shadow: 0 0 10px #20f050; }
-
-        .auth-link {
-            color: #a0d0b0; text-decoration: none;
-            display: inline-block; margin-top: 15px; font-size: 14px;
-        }
+        .auth-link { color: #a0d0b0; text-decoration: none; display: inline-block; margin-top: 15px; font-size: 14px; }
         .auth-link:hover { color: #20f050; }
-
-        .error-msg {
-            color: #f05050; font-size: 14px;
-            background: rgba(240,80,80,0.1);
-            border: 1px solid #f05050;
-            border-radius: 4px; padding: 8px; margin-bottom: 10px;
-        }
-
-        /* 頭像預覽 */
-        .avatar-preview-wrap {
-            display: flex; flex-direction: column; align-items: center;
-            margin: 14px 0 6px;
-        }
-
-        .avatar-preview {
-            width: 72px; height: 72px; border-radius: 50%;
-            border: 2px solid #20f050; object-fit: cover;
-            box-shadow: 0 0 10px rgba(32,240,80,0.3);
-            display: none;
-        }
-
-        .avatar-placeholder-circle {
-            width: 72px; height: 72px; border-radius: 50%;
-            border: 2px dashed #154525; background: #051008;
-            display: flex; align-items: center; justify-content: center;
-            color: #3a7050; font-size: 28px; cursor: pointer;
-            transition: border-color 0.2s;
-        }
+        .error-msg { color: #f05050; font-size: 14px; background: rgba(240,80,80,0.1); border: 1px solid #f05050; border-radius: 4px; padding: 8px; margin-bottom: 10px; }
+        .section-label { color: #3a7050; font-size: 12px; text-align: left; margin: 14px 0 4px; letter-spacing: 1px; }
+        .avatar-preview-wrap { display: flex; flex-direction: column; align-items: center; margin: 14px 0 6px; }
+        .avatar-preview { width: 72px; height: 72px; border-radius: 50%; border: 2px solid #20f050; object-fit: cover; box-shadow: 0 0 10px rgba(32,240,80,0.3); display: none; }
+        .avatar-placeholder-circle { width: 72px; height: 72px; border-radius: 50%; border: 2px dashed #154525; background: #051008; display: flex; align-items: center; justify-content: center; color: #3a7050; font-size: 28px; cursor: pointer; transition: border-color 0.2s; }
         .avatar-placeholder-circle:hover { border-color: #20f050; color: #20f050; }
-
         .avatar-hint { color: #3a7050; font-size: 12px; margin-top: 6px; }
-
         .avatar-file-input { display: none; }
+        .divider { border: none; border-top: 1px solid #104020; margin: 18px 0; }
     </style>
 </head>
 <body>
@@ -85,22 +57,37 @@
         {% endif %}
 
         <form method="POST" enctype="multipart/form-data">
-            <!-- 頭像上傳（點擊圓形預覽觸發） -->
             <div class="avatar-preview-wrap">
-                <div class="avatar-placeholder-circle" id="avatar-circle" onclick="document.getElementById('avatar-input').click()">
-                    ＋
-                </div>
+                <div class="avatar-placeholder-circle" id="avatar-circle" onclick="document.getElementById('avatar-input').click()">＋</div>
                 <img id="avatar-preview" class="avatar-preview" alt="頭像預覽">
                 <div class="avatar-hint">點擊上傳頭像（可選）</div>
-                <input type="file" name="avatar" id="avatar-input"
-                       class="avatar-file-input" accept="image/*"
-                       onchange="previewAvatar(event)">
+                <input type="file" name="avatar" id="avatar-input" class="avatar-file-input" accept="image/*" onchange="previewAvatar(event)">
             </div>
 
-            <input type="text" name="username" class="auth-input"
-                   placeholder="請輸入使用者名稱" required autocomplete="off">
-            <input type="password" name="password" class="auth-input"
-                   placeholder="請輸入密碼" required>
+            <div class="section-label">── 帳號資訊</div>
+            <input type="text" name="username" class="auth-input" placeholder="使用者名稱" required autocomplete="off">
+            <input type="password" name="password" class="auth-input" placeholder="密碼" required>
+
+            <hr class="divider">
+
+            <div class="section-label">── 安全提問（忘記密碼時使用）</div>
+            <select name="security_question" class="auth-select" required>
+                <option value="" disabled selected>請選擇安全提問...</option>
+                <option>你父親的出生地？</option>
+                <option>你母親的出生地？</option>
+                <option>你小時候養的第一隻寵物名字？</option>
+                <option>你就讀的第一所小學名稱？</option>
+                <option>你最喜歡的老師姓名？</option>
+                <option>你父親的駕照後四碼？</option>
+                <option>你母親的駕照後四碼？</option>
+                <option>你的出生醫院名稱？</option>
+                <option>你第一份工作的公司名稱？</option>
+                <option>你最好的朋友的名字？</option>
+                <option>你小時候最喜歡的食物？</option>
+                <option>你父母相識的城市？</option>
+            </select>
+            <input type="text" name="security_answer" class="auth-input" placeholder="請輸入答案（不區分大小寫）" required autocomplete="off">
+
             <button type="submit" class="auth-btn">確認註冊</button>
         </form>
 
@@ -113,10 +100,9 @@
             if (!file) return;
             const reader = new FileReader();
             reader.onload = function(e) {
-                const circle  = document.getElementById('avatar-circle');
+                document.getElementById('avatar-circle').style.display = 'none';
                 const preview = document.getElementById('avatar-preview');
-                circle.style.display  = 'none';
-                preview.src           = e.target.result;
+                preview.src = e.target.result;
                 preview.style.display = 'block';
             };
             reader.readAsDataURL(file);
