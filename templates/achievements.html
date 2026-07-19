@@ -746,3 +746,159 @@
                 });
                 ctx.restore();
 
+                if (recognitionMode === 'static') {
+                    // 靜態模式：只跑單幀手形分類，完全不碰動態歷史緩衝區
+                    label = classifyGesture(landmarks);
+                    processGestureLabel(label);
+                } else {
+                    // 動態模式：只累積歷史、檢查動態手勢，不跑靜態分類
+                    pushHistory(landmarks);
+                    const dynamicLabel = checkDynamicGestures(getHistory());
+
+                    const historyLen = getHistory().length;
+                    const progress = Math.min(100, Math.round((historyLen / HISTORY_LENGTH) * 100));
+                    stabilityBar.style.width = progress + '%';
+
+                    if (dynamicLabel) {
+                        confirmGesture(dynamicLabel);
+                        clearHistory();
+                        stabilityBar.style.width = '0%';
+                        statusText.style.color = '#20f050';
+                        statusText.innerText = `已加入：${dynamicLabel}`;
+                    } else {
+                        statusText.style.color = '#20f050';
+                        statusText.innerText = `動作蒐集中...（${progress}%）`;
+                    }
+                }
+            } else {
+                stabilityBar.style.width = '0%';
+                statusText.style.color = '#20f050';
+                statusText.innerText = '未偵測到手勢...';
+                if (recognitionMode === 'dynamic') clearHistory();
+            }
+
+            requestAnimationFrame(() => {}); // 保留 rAF 語意（實際繪製由 camera_utils 的 onFrame 驅動）
+        }
+
+        // ──────────────────────────────────────
+        // 手勢穩定度計算 + 句子確認
+        // ──────────────────────────────────────
+        function processGestureLabel(label) {
+            currentLabel = label;
+
+            if (!label) {
+                stableLabel = null;
+                stableCount = 0;
+                stabilityBar.style.width = '0%';
+                statusText.style.color = '#20f050';
+                statusText.innerText = '未偵測到手勢...';
+                return;
+            }
+
+            // 冷卻中：顯示剛確認的結果，不累積新的穩定計數
+            if (Date.now() < cooldownUntil) {
+                statusText.style.color = '#20f050';
+                statusText.innerText = `已加入：${lastConfirmed}`;
+                return;
+            }
+
+            if (label === stableLabel) {
+                stableCount++;
+            } else {
+                stableLabel = label;
+                stableCount = 1;
+            }
+
+            const progress = Math.min(100, Math.round((stableCount / STABLE_FRAMES) * 100));
+            stabilityBar.style.width = progress + '%';
+
+            if (stableCount >= STABLE_FRAMES) {
+                confirmGesture(label);
+                stableLabel = null;
+                stableCount = 0;
+                stabilityBar.style.width = '0%';
+                return;
+            }
+
+            statusText.style.color = progress >= 70 ? '#f0c020' : '#20f050';
+            statusText.innerText = `辨識中：${label}（穩定度 ${progress}%）`;
+        }
+
+        // ──────────────────────────────────────
+        // 開啟攝影機
+        // ──────────────────────────────────────
+        startBtn.addEventListener('click', async function () {
+            try {
+                statusText.style.color = '#20f050';
+                statusText.innerText   = '正在開啟攝影機...';
+
+                cameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480 },
+                    audio: false,
+                });
+
+                video.srcObject = cameraStream;
+                await video.play();
+
+                isDetecting = true;
+                stableLabel = null;
+                stableCount = 0;
+                cooldownUntil = 0;
+
+                startBtn.disabled = true;
+                stopBtn.disabled  = false;
+
+                statusText.innerText = '攝影機已啟動，開始 MediaPipe 辨識...';
+
+                mpCamera = new Camera(video, {
+                    onFrame: async () => {
+                        if (!isDetecting) return;
+                        await hands.send({ image: video });
+                    },
+                    width: 640,
+                    height: 480,
+                });
+
+                mpCamera.start();
+
+            } catch (error) {
+                console.error(error);
+                statusText.innerText = '無法開啟攝影機，請檢查權限或瀏覽器設定';
+            }
+        });
+
+        // ──────────────────────────────────────
+        // 關閉攝影機
+        // ──────────────────────────────────────
+        stopBtn.addEventListener('click', function () {
+            isDetecting = false;
+
+            if (mpCamera) {
+                mpCamera.stop();
+                mpCamera = null;
+            }
+
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(t => t.stop());
+                cameraStream = null;
+            }
+
+            video.pause();
+            video.srcObject = null;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            stabilityBar.style.width = '0%';
+
+            stableLabel = null;
+            stableCount = 0;
+            cooldownUntil = 0;
+
+            statusText.style.color = '#20f050';
+            statusText.innerText   = '攝影機已關閉';
+
+            startBtn.disabled = false;
+            stopBtn.disabled  = true;
+        });
+    </script>
+</body>
+</html>
