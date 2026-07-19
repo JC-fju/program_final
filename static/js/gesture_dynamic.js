@@ -52,13 +52,12 @@ function isThumbUpShape(lm) {
 function isXieXieDynamic(history) {
   if (history.length < HISTORY_LENGTH) return false;
 
-  // 全程都要維持拇指朝上手形（允許少量雜訊幀，這裡先要求嚴格全符合，
-  // 之後有更多樣本可以放寬成「80% 以上幀數符合」）
-  const shapeOK = history.every(isThumbUpShape);
+  // 放寬：不要求「每一幀」都完美符合拇指朝上手形，
+  // 只要 60% 以上的幀數符合就算（容忍手指角度的抖動雜訊）
+  const shapeMatchCount = history.filter(isThumbUpShape).length;
+  const shapeOK = (shapeMatchCount / history.length) > 0.6;
   if (!shapeOK) return false;
 
-  // 用手腕 y 座標判斷「上升」：歷史前段（開頭 30%）平均 y
-  // 應該明顯大於（更低）後段（結尾 40%）平均 y
   const n = history.length;
   const earlySlice = history.slice(0, Math.floor(n * 0.3));
   const lateSlice  = history.slice(Math.floor(n * 0.6));
@@ -67,12 +66,16 @@ function isXieXieDynamic(history) {
   const earlyY = avgY(earlySlice);
   const lateY  = avgY(lateSlice);
 
-  const roseUp = (earlyY - lateY) > 0.06; // 手腕明顯上移（y 變小），門檻依實測再調
+  // 放寬：改用「相對手部尺寸」的位移比例，取代絕對座標差，
+  // 避免因為每個人手離鏡頭遠近不同、絕對座標門檻不合用的問題
+  const avgHandSize = history.reduce((s, lm) => s + dist(lm[0], lm[9]), 0) / history.length;
+  const riseRatio = (earlyY - lateY) / avgHandSize;
+  const roseUp = riseRatio > 0.25; // 手腕上升幅度達手長的 25% 以上（原本是絕對值0.06，明顯更寬鬆）
 
-  // 後段要相對穩定（停留），用 y 座標變異量判斷
+  // 放寬：停留判斷也改用相對比例，並放寬允許的晃動範圍
   const lateYs = lateSlice.map(lm => lm[0].y);
-  const lateRange = Math.max(...lateYs) - Math.min(...lateYs);
-  const settled = lateRange < 0.03;
+  const lateRange = (Math.max(...lateYs) - Math.min(...lateYs)) / avgHandSize;
+  const settled = lateRange < 0.15; // 原本 0.03（絕對值）太嚴格，改成手長比例且放寬
 
   return roseUp && settled;
 }
