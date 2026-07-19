@@ -327,6 +327,31 @@
             font-size: 13px !important;
         }
 
+        .mode-row {
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .mode-label {
+            color: #a0d0b0;
+            font-size: 13px;
+            letter-spacing: 1px;
+        }
+
+        .mode-btn {
+            opacity: 0.45;
+            background: transparent !important;
+            border: 1px solid #20f050 !important;
+            color: #20f050 !important;
+        }
+
+        .mode-btn.active-mode {
+            opacity: 1;
+            background: #104020 !important;
+            box-shadow: 0 0 8px rgba(32, 240, 80, 0.4);
+        }
+
         @media (max-width: 768px) {
             .github-section,
             .carousel-wrapper {
@@ -466,6 +491,12 @@
                 <button id="stop-btn" class="submit-post-btn" disabled>關閉攝影機</button>
             </div>
 
+            <div class="button-row mode-row">
+                <span class="mode-label">辨識模式：</span>
+                <button id="mode-static-btn"  class="submit-post-btn small-btn mode-btn active-mode">靜態手勢</button>
+                <button id="mode-dynamic-btn" class="submit-post-btn small-btn mode-btn">動態手勢</button>
+            </div>
+
             <div class="sentence-box">
                 <div class="sentence-label">組合句子：</div>
                 <div id="sentence-output"></div>
@@ -567,6 +598,35 @@
         const clearBtn       = document.getElementById('clear-btn');
         const copyBtn        = document.getElementById('copy-btn');
 
+        // ──────────────────────────────────────
+        // 辨識模式：靜態手勢 / 動態手勢（互斥，同一時間只跑一種）
+        // ──────────────────────────────────────
+        const modeStaticBtn  = document.getElementById('mode-static-btn');
+        const modeDynamicBtn = document.getElementById('mode-dynamic-btn');
+        let recognitionMode = 'static'; // 'static' | 'dynamic'
+
+        function setMode(mode) {
+            recognitionMode = mode;
+
+            modeStaticBtn.classList.toggle('active-mode', mode === 'static');
+            modeDynamicBtn.classList.toggle('active-mode', mode === 'dynamic');
+
+            // 切換模式時重置所有判斷狀態，避免殘留舊模式的累積資料互相干擾
+            stableLabel = null;
+            stableCount = 0;
+            cooldownUntil = 0;
+            stabilityBar.style.width = '0%';
+            if (typeof clearHistory === 'function') clearHistory();
+
+            statusText.style.color = '#20f050';
+            statusText.innerText = mode === 'static'
+                ? '已切換：靜態手勢模式'
+                : '已切換：動態手勢模式（請完整比出動作）';
+        }
+
+        modeStaticBtn.addEventListener('click', () => setMode('static'));
+        modeDynamicBtn.addEventListener('click', () => setMode('dynamic'));
+
         canvas.width  = 640;
         canvas.height = 480;
 
@@ -646,7 +706,7 @@
 
         hands.setOptions({
             maxNumHands: 1,
-            modelComplexity: 0,
+            modelComplexity: 1,
             minDetectionConfidence: 0.6,
             minTrackingConfidence: 0.6,
         });
@@ -686,132 +746,3 @@
                 });
                 ctx.restore();
 
-                label = classifyGesture(landmarks);
-            }
-
-            processGestureLabel(label);
-            requestAnimationFrame(() => {}); // 保留 rAF 語意（實際繪製由 camera_utils 的 onFrame 驅動）
-        }
-
-        // ──────────────────────────────────────
-        // 手勢穩定度計算 + 句子確認
-        // ──────────────────────────────────────
-        function processGestureLabel(label) {
-            currentLabel = label;
-
-            if (!label) {
-                stableLabel = null;
-                stableCount = 0;
-                stabilityBar.style.width = '0%';
-                statusText.style.color = '#20f050';
-                statusText.innerText = '未偵測到手勢...';
-                return;
-            }
-
-            // 冷卻中：顯示剛確認的結果，不累積新的穩定計數
-            if (Date.now() < cooldownUntil) {
-                statusText.style.color = '#20f050';
-                statusText.innerText = `已加入：${lastConfirmed}`;
-                return;
-            }
-
-            if (label === stableLabel) {
-                stableCount++;
-            } else {
-                stableLabel = label;
-                stableCount = 1;
-            }
-
-            const progress = Math.min(100, Math.round((stableCount / STABLE_FRAMES) * 100));
-            stabilityBar.style.width = progress + '%';
-
-            if (stableCount >= STABLE_FRAMES) {
-                confirmGesture(label);
-                stableLabel = null;
-                stableCount = 0;
-                stabilityBar.style.width = '0%';
-                return;
-            }
-
-            statusText.style.color = progress >= 70 ? '#f0c020' : '#20f050';
-            statusText.innerText = `辨識中：${label}（穩定度 ${progress}%）`;
-        }
-
-        // ──────────────────────────────────────
-        // 開啟攝影機
-        // ──────────────────────────────────────
-        startBtn.addEventListener('click', async function () {
-            try {
-                statusText.style.color = '#20f050';
-                statusText.innerText   = '正在開啟攝影機...';
-
-                cameraStream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: 640, height: 480 },
-                    audio: false,
-                });
-
-                video.srcObject = cameraStream;
-                await video.play();
-
-                isDetecting = true;
-                stableLabel = null;
-                stableCount = 0;
-                cooldownUntil = 0;
-
-                startBtn.disabled = true;
-                stopBtn.disabled  = false;
-
-                statusText.innerText = '攝影機已啟動，開始 MediaPipe 辨識...';
-
-                mpCamera = new Camera(video, {
-                    onFrame: async () => {
-                        if (!isDetecting) return;
-                        await hands.send({ image: video });
-                    },
-                    width: 640,
-                    height: 480,
-                });
-
-                mpCamera.start();
-
-            } catch (error) {
-                console.error(error);
-                statusText.innerText = '無法開啟攝影機，請檢查權限或瀏覽器設定';
-            }
-        });
-
-        // ──────────────────────────────────────
-        // 關閉攝影機
-        // ──────────────────────────────────────
-        stopBtn.addEventListener('click', function () {
-            isDetecting = false;
-
-            if (mpCamera) {
-                mpCamera.stop();
-                mpCamera = null;
-            }
-
-            if (cameraStream) {
-                cameraStream.getTracks().forEach(t => t.stop());
-                cameraStream = null;
-            }
-
-            video.pause();
-            video.srcObject = null;
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            stabilityBar.style.width = '0%';
-
-            stableLabel = null;
-            stableCount = 0;
-            cooldownUntil = 0;
-
-            statusText.style.color = '#20f050';
-            statusText.innerText   = '攝影機已關閉';
-
-            startBtn.disabled = false;
-            stopBtn.disabled  = true;
-        });
-    </script>
-</body>
-</html>
