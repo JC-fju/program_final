@@ -7,6 +7,13 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/eden.css') }}">
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='image/favicon.ico') }}">
 
+    <!-- MediaPipe Hands 前端手部關節點偵測 -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <!-- 38 種手勢判斷規則（isXxx / classifyGesture） -->
+    <script src="{{ url_for('static', filename='js/gesture_rules.js') }}"></script>
+
     <style>
         body {
             margin: 0;
@@ -261,6 +268,65 @@
         .confidence-medium { color: #f0c020; }
         .confidence-low    { color: #f05020; }
 
+        /* 穩定度進度條（顯示手勢確認進度） */
+        #stability-bar-wrap {
+            position: absolute;
+            bottom: 46px;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.08);
+            z-index: 5;
+        }
+
+        #stability-bar {
+            height: 100%;
+            width: 0%;
+            background: #20f050;
+            box-shadow: 0 0 6px #20f050;
+            transition: width 0.08s linear;
+        }
+
+        /* 句子組合框 */
+        .sentence-box {
+            margin-top: 20px;
+            background: rgba(10, 25, 15, 0.6);
+            border: 1px solid #104020;
+            border-radius: 8px;
+            padding: 15px 20px;
+            text-align: left;
+        }
+
+        .sentence-label {
+            color: #a0d0b0;
+            font-size: 13px;
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+        }
+
+        #sentence-output {
+            min-height: 40px;
+            color: #20f050;
+            font-size: 22px;
+            letter-spacing: 3px;
+            word-break: break-all;
+            border-bottom: 1px solid #154525;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+
+        .sentence-btn-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .small-btn {
+            margin: 0 !important;
+            padding: 8px 14px !important;
+            font-size: 13px !important;
+        }
+
         @media (max-width: 768px) {
             .github-section,
             .carousel-wrapper {
@@ -383,13 +449,16 @@
     </div>
 
     <div class="github-section">
-        <h2 class="github-title">AI 實驗室 <span>// CNN Gesture Recognition</span></h2>
+        <h2 class="github-title">AI 實驗室 <span>// MediaPipe 手語辨識</span></h2>
 
         <div class="ai-lab-container">
             <div class="camera-box">
                 <video id="webcam" autoplay playsinline muted></video>
                 <canvas id="output_canvas"></canvas>
                 <div id="gesture-status">等待啟動...</div>
+                <div id="stability-bar-wrap">
+                    <div id="stability-bar"></div>
+                </div>
             </div>
 
             <div class="button-row">
@@ -397,9 +466,22 @@
                 <button id="stop-btn" class="submit-post-btn" disabled>關閉攝影機</button>
             </div>
 
+            <div class="sentence-box">
+                <div class="sentence-label">組合句子：</div>
+                <div id="sentence-output"></div>
+                <div class="sentence-btn-row">
+                    <button id="space-btn"  class="submit-post-btn small-btn">加空格</button>
+                    <button id="back-btn"   class="submit-post-btn small-btn">刪除一字</button>
+                    <button id="clear-btn"  class="submit-post-btn small-btn">清除句子</button>
+                    <button id="copy-btn"   class="submit-post-btn small-btn">複製句子</button>
+                </div>
+            </div>
+
             <div class="gesture-help">
-                請將手放入綠色框框內，系統只會截取框框區域送到 CNN 模型辨識 0～5。<br>
-                <span style="color:#20f050;">✦ 手勢 1 → 上一張照片　手勢 2 → 下一張照片</span>
+                請將手放入鏡頭範圍內，系統使用 MediaPipe Hands 於前端即時擷取 21 個手部關節點，
+                並比對 <b>gesture_rules.js</b> 中定義的 38 種手勢規則進行分類。<br>
+                同一手勢需穩定維持數幀後才會被確認並加入句子（避免手勢切換過程中的誤判）。<br>
+                <span style="color:#20f050;">✦ 手勢「一」→ 上一張照片　手勢「二」→ 下一張照片（此二手勢不會加入句子）</span>
             </div>
         </div>
     </div>
@@ -430,7 +512,7 @@
         nextButton.addEventListener('click', goNextSlide);
         prevButton.addEventListener('click', goPrevSlide);
 
-        // 手勢控制走馬燈（由 CNN 辨識區呼叫）
+        // 手勢控制走馬燈（由 MediaPipe 辨識區呼叫）
         // 1 → 上一張、2 → 下一張、0/3/4/5 → 無動作
         let lastGestureLabel = null;
         let gestureCooldown  = false;
@@ -469,213 +551,190 @@
         }
     </script>
 
-    <!-- CNN 手勢辨識 -->
+    <!-- MediaPipe 手語辨識 + 句子組合 -->
     <script>
         const video        = document.getElementById('webcam');
         const canvas       = document.getElementById('output_canvas');
         const ctx          = canvas.getContext('2d');
         const statusText   = document.getElementById('gesture-status');
+        const stabilityBar = document.getElementById('stability-bar');
         const startBtn     = document.getElementById('start-btn');
         const stopBtn      = document.getElementById('stop-btn');
+
+        const sentenceOutput = document.getElementById('sentence-output');
+        const spaceBtn       = document.getElementById('space-btn');
+        const backBtn        = document.getElementById('back-btn');
+        const clearBtn       = document.getElementById('clear-btn');
+        const copyBtn        = document.getElementById('copy-btn');
 
         canvas.width  = 640;
         canvas.height = 480;
 
-        let cameraStream      = null;
-        let isDetecting       = false;
-        let isPredicting      = false;
-        let predictionHistory = [];
-        let loopTimer         = null;
-
-        const ROI_SIZE         = 360;
-        const LOOP_INTERVAL    = 250;   // 回應完才等 250ms，比固定 650ms 更即時
-        const HISTORY_SIZE     = 5;
-        const CONFIDENCE_THRES = 0.60;  // 信心低於此值不顯示結果
+        let cameraStream   = null;
+        let isDetecting    = false;
+        let mpCamera       = null;
 
         // ──────────────────────────────────────
-        // ROI 位置計算
+        // 句子組合狀態
         // ──────────────────────────────────────
-        function getRoiRect() {
-            return {
-                x:    Math.floor((canvas.width  - ROI_SIZE) / 2),
-                y:    Math.floor((canvas.height - ROI_SIZE) / 2),
-                size: ROI_SIZE,
-            };
+        let sentenceChars = [];
+
+        // 手勢穩定確認：同一手勢需連續出現 STABLE_FRAMES 幀才算「確認」
+        const STABLE_FRAMES   = 15;   // 約 0.5~0.8 秒（依偵測 FPS）
+        const CONFIRM_COOLDOWN = 700; // 確認後的冷卻時間（毫秒），避免同一手勢重複加入
+
+        let currentLabel   = null;   // 這一幀辨識出的手勢
+        let stableLabel    = null;   // 正在累積穩定計數的手勢
+        let stableCount    = 0;
+        let lastConfirmed  = null;   // 上一次確認加入句子的手勢
+        let cooldownUntil  = 0;
+
+        // 手勢「一」「二」保留給走馬燈控制，不加入句子
+        const CAROUSEL_GESTURES = new Set(['一', '二']);
+
+        function renderSentence() {
+            sentenceOutput.innerText = sentenceChars.join('') || '（尚未組合任何內容）';
         }
 
-        // ──────────────────────────────────────
-        // 多數決平滑：取最近 N 幀最常出現的結果
-        // ──────────────────────────────────────
-        function smoothPrediction(label) {
-            predictionHistory.push(label);
-            if (predictionHistory.length > HISTORY_SIZE) {
-                predictionHistory.shift();
+        function confirmGesture(label) {
+            lastConfirmed = label;
+            cooldownUntil = Date.now() + CONFIRM_COOLDOWN;
+
+            if (CAROUSEL_GESTURES.has(label)) {
+                handleGestureControl(label);
+                return;
             }
 
-            const countMap = {};
-            predictionHistory.forEach(item => {
-                countMap[item] = (countMap[item] || 0) + 1;
-            });
-
-            let bestLabel = label;
-            let bestCount = 0;
-            Object.keys(countMap).forEach(item => {
-                if (countMap[item] > bestCount) {
-                    bestLabel = item;
-                    bestCount = countMap[item];
-                }
-            });
-
-            return bestLabel;
+            sentenceChars.push(label);
+            renderSentence();
         }
 
-        // ──────────────────────────────────────
-        // 畫面繪製（每幀）
-        // ──────────────────────────────────────
-        function drawCameraFrame() {
-            if (!isDetecting) return;
+        spaceBtn.addEventListener('click', () => {
+            sentenceChars.push('　');
+            renderSentence();
+        });
 
+        backBtn.addEventListener('click', () => {
+            sentenceChars.pop();
+            renderSentence();
+        });
+
+        clearBtn.addEventListener('click', () => {
+            sentenceChars = [];
+            renderSentence();
+        });
+
+        copyBtn.addEventListener('click', async () => {
+            const text = sentenceChars.join('');
+            try {
+                await navigator.clipboard.writeText(text);
+                copyBtn.innerText = '已複製！';
+                setTimeout(() => { copyBtn.innerText = '複製句子'; }, 1200);
+            } catch (err) {
+                console.error('複製失敗', err);
+            }
+        });
+
+        renderSentence();
+
+        // ──────────────────────────────────────
+        // MediaPipe Hands 初始化
+        // ──────────────────────────────────────
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.6,
+            minTrackingConfidence: 0.6,
+        });
+
+        hands.onResults(onHandsResults);
+
+        // ──────────────────────────────────────
+        // 每幀辨識結果處理
+        // ──────────────────────────────────────
+        function onHandsResults(results) {
+            ctx.save();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 鏡像繪製影像
-            ctx.save();
+            // 鏡像繪製攝影機畫面
             ctx.scale(-1, 1);
-            ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+            ctx.drawImage(results.image, -canvas.width, 0, canvas.width, canvas.height);
             ctx.restore();
 
-            const roi = getRoiRect();
+            let label = null;
 
-            // 框外壓暗
-            ctx.save();
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.20)';
-            ctx.fillRect(0, 0, canvas.width, roi.y);
-            ctx.fillRect(0, roi.y + roi.size, canvas.width, canvas.height - roi.y - roi.size);
-            ctx.fillRect(0, roi.y, roi.x, roi.size);
-            ctx.fillRect(roi.x + roi.size, roi.y, canvas.width - roi.x - roi.size, roi.size);
-            ctx.restore();
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
 
-            // 主框線
-            ctx.strokeStyle = '#20f050';
-            ctx.lineWidth   = 3;
-            ctx.strokeRect(roi.x, roi.y, roi.size, roi.size);
-
-            // 四角裝飾（科技感）
-            const cornerLen = 20;
-            const corners = [
-                [roi.x,            roi.y,            1,  1],
-                [roi.x + roi.size, roi.y,           -1,  1],
-                [roi.x,            roi.y + roi.size,  1, -1],
-                [roi.x + roi.size, roi.y + roi.size, -1, -1],
-            ];
-            ctx.strokeStyle = '#20f050';
-            ctx.lineWidth   = 4;
-            corners.forEach(([cx, cy, dx, dy]) => {
-                ctx.beginPath();
-                ctx.moveTo(cx + dx * cornerLen, cy);
-                ctx.lineTo(cx, cy);
-                ctx.lineTo(cx, cy + dy * cornerLen);
-                ctx.stroke();
-            });
-
-            // 提示標籤
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-            ctx.fillRect(roi.x, roi.y - 34, roi.size, 30);
-            ctx.fillStyle = '#20f050';
-            ctx.font      = '18px monospace';
-            ctx.fillText('請將手放入框框內', roi.x + 88, roi.y - 12);
-
-            requestAnimationFrame(drawCameraFrame);
-        }
-
-        // ──────────────────────────────────────
-        // 截取 ROI（直接從 video 截，不含 canvas 上的標註）
-        // ──────────────────────────────────────
-        function getRoiImageData() {
-            const roi      = getRoiRect();
-            const roiCanvas = document.createElement('canvas');
-            roiCanvas.width  = roi.size;
-            roiCanvas.height = roi.size;
-            const roiCtx = roiCanvas.getContext('2d');
-
-            roiCtx.save();
-            roiCtx.scale(-1, 1);
-            roiCtx.drawImage(
-                video,
-                -(canvas.width - roi.x),
-                -roi.y,
-                canvas.width,
-                canvas.height
-            );
-            roiCtx.restore();
-
-            return roiCanvas.toDataURL('image/png');
-        }
-
-        // ──────────────────────────────────────
-        // 送出預測（回應完才排下一次）
-        // ──────────────────────────────────────
-        async function predictCurrentFrame() {
-            if (!isDetecting || isPredicting) return;
-
-            isPredicting = true;
-
-            try {
-                const imageData = getRoiImageData();
-
-                const response = await fetch('/predict_gesture', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: imageData }),
+                // 畫骨架與關節點（鏡像座標）
+                ctx.save();
+                ctx.scale(-1, 1);
+                ctx.translate(-canvas.width, 0);
+                drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {
+                    color: '#20f050',
+                    lineWidth: 3,
                 });
+                drawLandmarks(ctx, landmarks, {
+                    color: '#20f050',
+                    fillColor: '#0a2010',
+                    lineWidth: 1,
+                    radius: 3,
+                });
+                ctx.restore();
 
-                const result = await response.json();
-
-                if (!result.success) {
-                    statusText.innerText = result.error || 'CNN 辨識失敗';
-                    return;
-                }
-
-                // 信心閾值過濾：太低就不更新顯示
-                if (result.confidence < CONFIDENCE_THRES) {
-                    statusText.className  = '';
-                    statusText.innerText  = `辨識中... （信心不足 ${Math.round(result.confidence * 100)}%）`;
-                    return;
-                }
-
-                const smoothLabel       = smoothPrediction(result.label);
-                const confidencePercent = Math.round(result.confidence * 100);
-
-                // 手勢控制走馬燈
-                handleGestureControl(smoothLabel);
-
-                // 根據信心度改顏色
-                if (confidencePercent >= 85) {
-                    statusText.style.color = '#20f050';
-                } else if (confidencePercent >= 70) {
-                    statusText.style.color = '#f0c020';
-                } else {
-                    statusText.style.color = '#f05020';
-                }
-
-                statusText.innerText = `辨識結果：${smoothLabel}｜信心度：${confidencePercent}%`;
-
-            } catch (error) {
-                console.error(error);
-                statusText.innerText = '無法連線到 CNN 辨識 API';
-            } finally {
-                isPredicting = false;
+                label = classifyGesture(landmarks);
             }
+
+            processGestureLabel(label);
+            requestAnimationFrame(() => {}); // 保留 rAF 語意（實際繪製由 camera_utils 的 onFrame 驅動）
         }
 
         // ──────────────────────────────────────
-        // 動態節流：回應完才等 LOOP_INTERVAL ms
+        // 手勢穩定度計算 + 句子確認
         // ──────────────────────────────────────
-        async function predictionLoop() {
-            if (!isDetecting) return;
-            await predictCurrentFrame();
-            if (isDetecting) {
-                loopTimer = setTimeout(predictionLoop, LOOP_INTERVAL);
+        function processGestureLabel(label) {
+            currentLabel = label;
+
+            if (!label) {
+                stableLabel = null;
+                stableCount = 0;
+                stabilityBar.style.width = '0%';
+                statusText.style.color = '#20f050';
+                statusText.innerText = '未偵測到手勢...';
+                return;
             }
+
+            // 冷卻中：顯示剛確認的結果，不累積新的穩定計數
+            if (Date.now() < cooldownUntil) {
+                statusText.style.color = '#20f050';
+                statusText.innerText = `已加入：${lastConfirmed}`;
+                return;
+            }
+
+            if (label === stableLabel) {
+                stableCount++;
+            } else {
+                stableLabel = label;
+                stableCount = 1;
+            }
+
+            const progress = Math.min(100, Math.round((stableCount / STABLE_FRAMES) * 100));
+            stabilityBar.style.width = progress + '%';
+
+            if (stableCount >= STABLE_FRAMES) {
+                confirmGesture(label);
+                stableLabel = null;
+                stableCount = 0;
+                stabilityBar.style.width = '0%';
+                return;
+            }
+
+            statusText.style.color = progress >= 70 ? '#f0c020' : '#20f050';
+            statusText.innerText = `辨識中：${label}（穩定度 ${progress}%）`;
         }
 
         // ──────────────────────────────────────
@@ -692,21 +751,28 @@
                 });
 
                 video.srcObject = cameraStream;
+                await video.play();
 
-                video.onloadedmetadata = async function () {
-                    await video.play();
+                isDetecting = true;
+                stableLabel = null;
+                stableCount = 0;
+                cooldownUntil = 0;
 
-                    isDetecting       = true;
-                    predictionHistory = [];
+                startBtn.disabled = true;
+                stopBtn.disabled  = false;
 
-                    startBtn.disabled = true;
-                    stopBtn.disabled  = false;
+                statusText.innerText = '攝影機已啟動，開始 MediaPipe 辨識...';
 
-                    statusText.innerText = '攝影機已啟動，開始 CNN 辨識...';
+                mpCamera = new Camera(video, {
+                    onFrame: async () => {
+                        if (!isDetecting) return;
+                        await hands.send({ image: video });
+                    },
+                    width: 640,
+                    height: 480,
+                });
 
-                    drawCameraFrame();
-                    predictionLoop();
-                };
+                mpCamera.start();
 
             } catch (error) {
                 console.error(error);
@@ -718,13 +784,11 @@
         // 關閉攝影機
         // ──────────────────────────────────────
         stopBtn.addEventListener('click', function () {
-            isDetecting   = false;
-            isPredicting  = false;
-            predictionHistory = [];
+            isDetecting = false;
 
-            if (loopTimer) {
-                clearTimeout(loopTimer);
-                loopTimer = null;
+            if (mpCamera) {
+                mpCamera.stop();
+                mpCamera = null;
             }
 
             if (cameraStream) {
@@ -736,6 +800,11 @@
             video.srcObject = null;
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            stabilityBar.style.width = '0%';
+
+            stableLabel = null;
+            stableCount = 0;
+            cooldownUntil = 0;
 
             statusText.style.color = '#20f050';
             statusText.innerText   = '攝影機已關閉';

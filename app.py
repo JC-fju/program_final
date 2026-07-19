@@ -1,15 +1,10 @@
-import io
 import os
 import time
-import base64
 import threading
-import numpy as np
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from pathlib import Path
-from PIL import Image, ImageOps
-from tensorflow.keras.models import load_model
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename # 新增：用來過濾危險的檔案名稱
 from dotenv import load_dotenv
@@ -20,25 +15,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# =========================
-# CNN 手勢辨識模型設定
-# =========================
-
 BASE_DIR = Path(__file__).resolve().parent
-GESTURE_MODEL_PATH = BASE_DIR / "gesture_cnn_model.h5"
-
-GESTURE_LABELS = ["0", "1", "2", "3", "4", "5"]
-
-gesture_model = None
-
-try:
-    if GESTURE_MODEL_PATH.exists():
-        gesture_model = load_model(GESTURE_MODEL_PATH)
-        print(f"✅ 手勢 CNN 模型載入成功：{GESTURE_MODEL_PATH}")
-    else:
-        print(f"⚠️ 找不到手勢 CNN 模型：{GESTURE_MODEL_PATH}")
-except Exception as e:
-    print("❌ 手勢 CNN 模型載入失敗：", e)
 
 # --- 建立給 HTML 用的時間轉換過濾器 ---
 @app.template_filter('tw_time')
@@ -104,87 +81,6 @@ class Reply(db.Model):
     post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False)
 
 
-
-# =========================
-# CNN 手勢辨識 API：圖片前處理
-# =========================
-def preprocess_gesture_image(image):
-    """
-    CNN 攝影機圖片前處理。
-
-    必須和 train_gesture_cnn.py 的 load_and_preprocess() 保持一致：
-    1. 灰階
-    2. resize 成 64x64
-    3. 保持 0~255
-    4. 不要 /255.0，因為模型內部已經有 Rescaling(1.0 / 255)
-    """
-
-    image = ImageOps.grayscale(image)
-    image = image.resize((64, 64))
-
-    img_array = np.array(image).astype("float32")
-
-    img_array = np.expand_dims(img_array, axis=-1)
-    img_array = np.expand_dims(img_array, axis=0)
-
-    return img_array
-
-
-@app.route("/predict_gesture", methods=["POST"])
-def predict_gesture():
-    """
-    接收 achievements.html 傳來的 base64 攝影機截圖，
-    使用 gesture_cnn_model.h5 預測手勢數字 0~5。
-    """
-    if gesture_model is None:
-        return jsonify({
-            "success": False,
-            "error": "CNN 模型尚未載入，請確認 gesture_cnn_model.h5 是否放在 app.py 同一層"
-        }), 500
-
-    try:
-        data = request.get_json(silent=True)
-
-        if not data or "image" not in data:
-            return jsonify({
-                "success": False,
-                "error": "沒有收到 image 資料"
-            }), 400
-
-        image_data = data["image"]
-
-        # 前端傳來通常會是 data:image/png;base64,xxxxx
-        if "," in image_data:
-            image_data = image_data.split(",", 1)[1]
-
-        image_bytes = base64.b64decode(image_data)
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-
-        processed_image = preprocess_gesture_image(image)
-        predictions = gesture_model.predict(processed_image, verbose=0)[0]
-
-        predicted_index = int(np.argmax(predictions))
-        predicted_label = GESTURE_LABELS[predicted_index]
-        confidence = float(predictions[predicted_index])
-
-        probabilities = {
-            label: float(predictions[index])
-            for index, label in enumerate(GESTURE_LABELS)
-        }
-
-        return jsonify({
-            "success": True,
-            "label": predicted_label,
-            "confidence": confidence,
-            "probabilities": probabilities
-        })
-
-    except Exception as e:
-        print("❌ 手勢預測失敗：", e)
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
 
 # 初始化資料表
 with app.app_context():
