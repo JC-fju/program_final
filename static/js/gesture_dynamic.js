@@ -10,18 +10,30 @@
 //
 // 之後每支新影片分析完，只要新增一個 isXxxDynamic(history) 函式，
 // 並加進 checkDynamicGestures() 的判斷清單即可，不用改動整體架構。
+//
+// 【改版重點】改成「以時間為窗口」而非「固定幀數」：
+// 原本 HISTORY_LENGTH=20 是指定幀數，在 FPS 不穩定（尤其筆電內顯、
+// modelComplexity 較高時 FPS 可能只有 1~2）的情況下，蒐集滿 20 幀
+// 可能要等 10~20 秒，導致動態手勢判斷「反應超慢」。
+// 改成時間窗口後，不管實際 FPS 多少，都是抓「最近 WINDOW_MS 毫秒內」
+// 的資料來判斷，跟 FPS 沒有直接綁定關係。
 
-const HISTORY_LENGTH = 20; // 約 0.6~0.8 秒（依前端偵測 FPS 而定），可依實測調整
-let _landmarkHistory = [];
+const WINDOW_MS = 900;        // 動作偵測窗口長度（毫秒），可依實測調整
+const MIN_SAMPLES = 6;        // 窗口內至少要有幾筆資料才夠判斷，避免 FPS 太低時資料太少誤判
+let _landmarkHistory = [];    // 每筆為 { lm: landmarks, t: timestamp(ms) }
 
 /**
- * 每一幀呼叫一次，把當幀 21 個關節點存入歷史緩衝區
+ * 每一幀呼叫一次，把當幀 21 個關節點連同時間戳記存入歷史緩衝區
  * @param {Array} landmarks - MediaPipe 單手 21 點 landmarks
  */
 function pushHistory(landmarks) {
   if (!landmarks) return;
-  _landmarkHistory.push(landmarks);
-  if (_landmarkHistory.length > HISTORY_LENGTH) {
+  const now = performance.now();
+  _landmarkHistory.push({ lm: landmarks, t: now });
+
+  // 只保留最近 WINDOW_MS 毫秒內的資料，跟幀數無關
+  const cutoff = now - WINDOW_MS;
+  while (_landmarkHistory.length > 0 && _landmarkHistory[0].t < cutoff) {
     _landmarkHistory.shift();
   }
 }
@@ -32,6 +44,12 @@ function getHistory() {
 
 function clearHistory() {
   _landmarkHistory = [];
+}
+
+// 目前窗口涵蓋的實際時間長度（毫秒），可用來在畫面上顯示進度
+function getHistoryTimeSpan() {
+  if (_landmarkHistory.length < 2) return 0;
+  return _landmarkHistory[_landmarkHistory.length - 1].t - _landmarkHistory[0].t;
 }
 
 // ── 輔助：拇指是否朝上伸直（沿用 gesture_rules.js 的手形判斷邏輯風格）──
@@ -47,35 +65,38 @@ function isThumbUpShape(lm) {
 }
 
 // ── 「謝謝」動態判斷 ──
-// 動作特徵：拇指朝上手形，且手部（以手腕 lm[0] 或掌心 lm[9] 為代表點）
-// 在近期歷史中「由下往上抬起，之後停留」
+// 動作特徵：拇指朝上手形，且手部（以手腕 lm[0] 為代表點）
+// 在近期時間窗口內「由下往上抬起，之後停留」
 function isXieXieDynamic(history) {
-  if (history.length < HISTORY_LENGTH) return false;
+  if (history.length < MIN_SAMPLES) return false;
+  if (getHistoryTimeSpan() < WINDOW_MS * 0.8) return false; // 窗口時間還沒蒐集夠，先不判斷
 
-  // 放寬：不要求「每一幀」都完美符合拇指朝上手形，
-  // 只要 60% 以上的幀數符合就算（容忍手指角度的抖動雜訊）
-  const shapeMatchCount = history.filter(isThumbUpShape).length;
-  const shapeOK = (shapeMatchCount / history.length) > 0.6;
+  const lms = history.map(h => h.lm);
+
+  // 不要求「每一筆」都完美符合拇指朝上手形，
+  // 只要 60% 以上符合就算（容忍手指角度的抖動雜訊）
+  const shapeMatchCount = lms.filter(isThumbUpShape).length;
+  const shapeOK = (shapeMatchCount / lms.length) > 0.6;
   if (!shapeOK) return false;
 
-  const n = history.length;
-  const earlySlice = history.slice(0, Math.floor(n * 0.3));
-  const lateSlice  = history.slice(Math.floor(n * 0.6));
+  const n = lms.length;
+  const earlySlice = lms.slice(0, Math.max(1, Math.floor(n * 0.3)));
+  const lateSlice  = lms.slice(Math.floor(n * 0.6));
 
   const avgY = (slice) => slice.reduce((s, lm) => s + lm[0].y, 0) / slice.length;
   const earlyY = avgY(earlySlice);
   const lateY  = avgY(lateSlice);
 
-  // 放寬：改用「相對手部尺寸」的位移比例，取代絕對座標差，
+  // 用「相對手部尺寸」的位移比例，取代絕對座標差，
   // 避免因為每個人手離鏡頭遠近不同、絕對座標門檻不合用的問題
-  const avgHandSize = history.reduce((s, lm) => s + dist(lm[0], lm[9]), 0) / history.length;
+  const avgHandSize = lms.reduce((s, lm) => s + dist(lm[0], lm[9]), 0) / lms.length;
   const riseRatio = (earlyY - lateY) / avgHandSize;
-  const roseUp = riseRatio > 0.25; // 手腕上升幅度達手長的 25% 以上（原本是絕對值0.06，明顯更寬鬆）
+  const roseUp = riseRatio > 0.25; // 手腕上升幅度達手長的 25% 以上
 
-  // 放寬：停留判斷也改用相對比例，並放寬允許的晃動範圍
+  // 停留判斷：後段幀的 y 變化幅度要小（相對比例）
   const lateYs = lateSlice.map(lm => lm[0].y);
   const lateRange = (Math.max(...lateYs) - Math.min(...lateYs)) / avgHandSize;
-  const settled = lateRange < 0.15; // 原本 0.03（絕對值）太嚴格，改成手長比例且放寬
+  const settled = lateRange < 0.15;
 
   return roseUp && settled;
 }

@@ -13,7 +13,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <!-- 38 種手勢判斷規則（isXxx / classifyGesture） -->
     <script src="{{ url_for('static', filename='js/gesture_rules.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/gesture_dynamic.js') }}"></script>
 
     <style>
         body {
@@ -707,7 +706,7 @@
 
         hands.setOptions({
             maxNumHands: 1,
-            modelComplexity: 1,
+            modelComplexity: 0,
             minDetectionConfidence: 0.6,
             minTrackingConfidence: 0.6,
         });
@@ -756,8 +755,8 @@
                     pushHistory(landmarks);
                     const dynamicLabel = checkDynamicGestures(getHistory());
 
-                    const historyLen = getHistory().length;
-                    const progress = Math.min(100, Math.round((historyLen / HISTORY_LENGTH) * 100));
+                    const timeSpan = getHistoryTimeSpan();
+                    const progress = Math.min(100, Math.round((timeSpan / WINDOW_MS) * 100));
                     stabilityBar.style.width = progress + '%';
 
                     if (dynamicLabel) {
