@@ -10,6 +10,10 @@ const thumbRight = (tip, ip)  => tip.x > ip.x;    // 拇指往右伸（右手）
 const thumbLeft  = (tip, ip)  => tip.x < ip.x;    // 拇指往左伸（右手比法）
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
+// 拇指是否張開：改用「拇指尖到小指根部（掌心對側）的距離」判斷，
+// 不受手心/手背朝向鏡頭翻轉的影響（原本用 x 座標左右比較，手一翻面就會判斷錯誤）
+const isThumbOut = (lm) => dist(lm[4], lm[17]) > 0.15;
+
 // ── 零（○）：全部手指彎曲，拇指與食指圍成圓形 ──
 function isZero(lm) {
   return !fingerUp(lm[8],  lm[6])
@@ -49,7 +53,7 @@ function isFour(lm) {
       &&  fingerUp(lm[12], lm[10])
       &&  fingerUp(lm[16], lm[14])
       &&  fingerUp(lm[20], lm[18])
-      && !thumbLeft(lm[4], lm[3]);   // 拇指收進來
+      && !isThumbOut(lm);   // 拇指收進來
 }
 
 // ── 五（五）：五根手指全部張開 ──
@@ -58,7 +62,7 @@ function isFive(lm) {
       &&  fingerUp(lm[12], lm[10])
       &&  fingerUp(lm[16], lm[14])
       &&  fingerUp(lm[20], lm[18])
-      &&  thumbLeft(lm[4], lm[3]);   // 拇指也張開
+      &&  isThumbOut(lm);   // 拇指也張開
 }
 
 // ── 六（六）：拇指 + 小指伸直，食中無彎曲 ──
@@ -67,7 +71,7 @@ function isSix(lm) {
       && !fingerUp(lm[12], lm[10])
       && !fingerUp(lm[16], lm[14])
       &&  fingerUp(lm[20], lm[18])
-      &&  thumbLeft(lm[4], lm[3]);   // 拇指伸出
+      &&  isThumbOut(lm);   // 拇指伸出
 }
 
 // ── 七（七）：拇指 + 食指 + 中指伸出，無名小指彎 ──
@@ -76,7 +80,7 @@ function isSeven(lm) {
       &&  fingerUp(lm[12], lm[10])
       && !fingerUp(lm[16], lm[14])
       && !fingerUp(lm[20], lm[18])
-      &&  thumbLeft(lm[4], lm[3]);
+      &&  isThumbOut(lm);
 }
 
 // ── 八（八）：拇指 + 食指伸出，形成 L 型，中無小彎 ──
@@ -85,7 +89,7 @@ function isEight(lm) {
       && !fingerUp(lm[12], lm[10])
       && !fingerUp(lm[16], lm[14])
       && !fingerUp(lm[20], lm[18])
-      &&  thumbLeft(lm[4], lm[3]);
+      &&  isThumbOut(lm);
 }
 
 // ── 九（九）：四指橫向伸直（手掌向側），拇指彎 ──
@@ -104,7 +108,7 @@ function isTen(lm) {
       && !fingerUp(lm[12], lm[10])
       && !fingerUp(lm[16], lm[14])
       && !fingerUp(lm[20], lm[18])
-      && !thumbLeft(lm[4], lm[3])
+      && !isThumbOut(lm)
       && dist(lm[4], lm[8]) > 0.08; // 拇指沒有圍圓（區分零）
 }
 
@@ -151,7 +155,7 @@ function isHand(lm) {
       &&  fingerUp(lm[12], lm[10])
       &&  fingerUp(lm[16], lm[14])
       &&  fingerUp(lm[20], lm[18])
-      && !thumbLeft(lm[4], lm[3])    // 拇指不張開
+      && !isThumbOut(lm)    // 拇指不張開
       && dist(lm[8], lm[12]) < 0.06  // 四指合攏
       && dist(lm[12], lm[16]) < 0.06;
 }
@@ -180,7 +184,7 @@ function isEighty(lm) {
       && lm[12].y > lm[9].y
       && lm[16].y > lm[13].y
       && lm[20].y > lm[17].y
-      && thumbLeft(lm[4], lm[3]);   // 拇指側張（與四十區分）
+      && isThumbOut(lm);   // 拇指側張（與四十區分）
 }
 
 // ================================================================
@@ -236,11 +240,11 @@ function isZhi(lm) {
       &&  lm[4].x < lm[3].x;         // 拇指往側邊伸
 }
 
-// ── 姊（姊）：只有中指伸直，其餘四指彎，類似比中指 ──
+// ── 姊（姊）：只有無名指伸直，其餘四指彎 ──
 function isJie(lm) {
   return !fingerUp(lm[8],  lm[6])    // 食指彎
-      &&  fingerUp(lm[12], lm[10])   // 中指伸直
-      && !fingerUp(lm[16], lm[14])
+      && !fingerUp(lm[12], lm[10])   // 中指彎
+      &&  fingerUp(lm[16], lm[14])   // 無名指伸直
       && !fingerUp(lm[20], lm[18]);
 }
 
