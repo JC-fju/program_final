@@ -13,6 +13,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <!-- 38 種手勢判斷規則（isXxx / classifyGesture） -->
     <script src="{{ url_for('static', filename='js/gesture_rules.js') }}"></script>
+    <!-- 動態手勢判斷架構（謝謝等動作型詞彙） -->
+    <script src="{{ url_for('static', filename='js/gesture_dynamic.js') }}"></script>
 
     <style>
         body {
@@ -226,8 +228,15 @@
             padding: 8px 0;
         }
 
-        .gesture-help {
-            margin-top: 15px;
+        .version-tag {
+            margin-top: 12px;
+            text-align: right;
+            font-size: 11px;
+            color: #3a6a4a;
+            letter-spacing: 1px;
+        }
+
+        .gesture-help {            margin-top: 15px;
             color: #a0d0b0;
             font-size: 14px;
             line-height: 1.8;
@@ -514,6 +523,8 @@
                 同一手勢需穩定維持數幀後才會被確認並加入句子（避免手勢切換過程中的誤判）。<br>
                 <span style="color:#20f050;">✦ 手勢「一」→ 上一張照片　手勢「二」→ 下一張照片（此二手勢不會加入句子）</span>
             </div>
+
+            <div class="version-tag">手語辨識模組 v1.9</div>
         </div>
     </div>
 
