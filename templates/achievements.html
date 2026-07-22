@@ -629,6 +629,16 @@
             stabilityBar.style.width = '0%';
             if (typeof clearHistory === 'function') clearHistory();
 
+            // 動態模式需要偵測雙手（例如「對不起」是雙手互動），靜態模式只需單手，省效能
+            if (typeof hands !== 'undefined' && hands) {
+                hands.setOptions({
+                    maxNumHands: mode === 'dynamic' ? 2 : 1,
+                    modelComplexity: 0,
+                    minDetectionConfidence: 0.6,
+                    minTrackingConfidence: 0.6,
+                });
+            }
+
             statusText.style.color = '#20f050';
             statusText.innerText = mode === 'static'
                 ? '已切換：靜態手勢模式'
@@ -739,31 +749,32 @@
             let label = null;
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const landmarks = results.multiHandLandmarks[0];
-
-                // 畫骨架與關節點（鏡像座標）
-                ctx.save();
-                ctx.scale(-1, 1);
-                ctx.translate(-canvas.width, 0);
-                drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {
-                    color: '#20f050',
-                    lineWidth: 3,
-                });
-                drawLandmarks(ctx, landmarks, {
-                    color: '#20f050',
-                    fillColor: '#0a2010',
-                    lineWidth: 1,
-                    radius: 3,
-                });
-                ctx.restore();
 
                 if (recognitionMode === 'static') {
-                    // 靜態模式：只跑單幀手形分類，完全不碰動態歷史緩衝區
+                    // 靜態模式：只用第一隻手，跑單幀手形分類
+                    const landmarks = results.multiHandLandmarks[0];
+
+                    ctx.save();
+                    ctx.scale(-1, 1);
+                    ctx.translate(-canvas.width, 0);
+                    drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: '#20f050', lineWidth: 3 });
+                    drawLandmarks(ctx, landmarks, { color: '#20f050', fillColor: '#0a2010', lineWidth: 1, radius: 3 });
+                    ctx.restore();
+
                     label = classifyGesture(landmarks);
                     processGestureLabel(label);
                 } else {
-                    // 動態模式：只累積歷史、檢查動態手勢，不跑靜態分類
-                    pushHistory(landmarks);
+                    // 動態模式：畫出偵測到的「所有」手（可能1隻或2隻），並整包傳給動態判斷
+                    ctx.save();
+                    ctx.scale(-1, 1);
+                    ctx.translate(-canvas.width, 0);
+                    for (const oneHand of results.multiHandLandmarks) {
+                        drawConnectors(ctx, oneHand, HAND_CONNECTIONS, { color: '#20f050', lineWidth: 3 });
+                        drawLandmarks(ctx, oneHand, { color: '#20f050', fillColor: '#0a2010', lineWidth: 1, radius: 3 });
+                    }
+                    ctx.restore();
+
+                    pushHistory(results.multiHandLandmarks);
                     const dynamicLabel = checkDynamicGestures(getHistory());
 
                     const timeSpan = getHistoryTimeSpan();

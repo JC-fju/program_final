@@ -10,8 +10,7 @@ const thumbRight = (tip, ip)  => tip.x > ip.x;    // 拇指往右伸（右手）
 const thumbLeft  = (tip, ip)  => tip.x < ip.x;    // 拇指往左伸（右手比法）
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
-// 拇指是否張開：改用「拇指尖到小指根部（掌心對側）的距離」判斷，
-// 不受手心/手背朝向鏡頭翻轉的影響（原本用 x 座標左右比較，手一翻面就會判斷錯誤）
+// 拇指是否張開：用「拇指尖到小指根部（掌心對側）的距離」判斷，
 const isThumbOut = (lm) => dist(lm[4], lm[17]) > 0.15;
 
 // ── 零（○）：全部手指彎曲，拇指與食指圍成圓形 ──
@@ -187,9 +186,6 @@ function isEighty(lm) {
       && isThumbOut(lm);   // 拇指側張（與四十區分）
 }
 
-// ================================================================
-// 第二批手語詞彙函式
-// ================================================================
 
 // ── 副（副）：全握拳，拇指微翹但不完全伸直 ──
 function isFu(lm) {
@@ -412,7 +408,7 @@ function classifyGesture(lm) {
   if (isMin(lm))      return "民";
   if (isHen(lm))      return "很";
   if (isZhi(lm))      return "隻";
-  if (isJie(lm))      return "姊";    // ⚠️ 與兄相同，需動態區分
+  if (isJie(lm))      return "姊";    
   if (isXiong(lm))    return "兄";
   if (isTong(lm))     return "童";
   if (isZong(lm))     return "棕";
