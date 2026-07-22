@@ -105,42 +105,53 @@ function isXieXieDynamic(history) {
   return roseUp && settled;
 }
 
-// ── 「拜託」動態判斷（雙手）──
-// 動作特徵：雙手握拳互扣（手腕距離近且穩定），合併中心點上下反覆擺動
+// ── 「拜託」動態判斷（雙手，但容忍互扣時只偵測到單手）──
+// 動作特徵：手握拳（互扣時常只認得出一隻手，是 MediaPipe 遮擋下的正常現象），
+// 合併中心點上下反覆擺動
 function isBaituoDynamic(history) {
   if (history.length < MIN_SAMPLES) return false;
   if (getHistoryTimeSpan() < WINDOW_MS * 0.8) return false;
 
-  // 只取「這一幀確實偵測到兩隻手」的樣本
-  const validFrames = history.filter(h => h.hands && h.hands.length === 2);
-  if (validFrames.length / history.length < 0.6) return false; // 大部分時間都要偵測到雙手
+  // 放寬：不要求一定要偵測到兩隻手，只要每幀「至少偵測到一隻手」就納入
+  const validFrames = history.filter(h => h.hands && h.hands.length >= 1);
+  if (validFrames.length / history.length < 0.7) return false;
   if (validFrames.length < MIN_SAMPLES) return false;
 
-  // 手形：兩手都要是握拳
-  const fistMatchCount = validFrames.filter(h => isFistShape(h.hands[0]) && isFistShape(h.hands[1])).length;
+  // 手形：偵測到的手裡面，至少有一隻是握拳（不要求兩隻都要偵測到才判斷）
+  const fistMatchCount = validFrames.filter(h => h.hands.some(isFistShape)).length;
   if (fistMatchCount / validFrames.length < 0.6) return false;
 
-  // 互扣：兩手手腕距離要夠近（用第一幀手的尺寸當參考，避免絕對座標問題）
-  const avgHandSize = validFrames.reduce((s, h) => s + dist(h.hands[0][0], h.hands[0][9]), 0) / validFrames.length;
-  const wristDists = validFrames.map(h => dist(h.hands[0][0], h.hands[1][0]));
-  const avgWristDist = wristDists.reduce((a, b) => a + b, 0) / wristDists.length;
-  const clasped = (avgWristDist / avgHandSize) < 1.5; // 兩手腕距離小於約1.5倍手長，視為扣在一起
-  if (!clasped) return false;
+  // 互扣檢查：只在「剛好那一幀有偵測到兩隻手」時才檢查距離，
+  // 抓不到第二隻手的幀直接跳過這項檢查，不會因為遮擋而卡住整體判定
+  const twoHandFrames = validFrames.filter(h => h.hands.length === 2);
+  if (twoHandFrames.length >= 2) {
+    const avgHandSize = twoHandFrames.reduce((s, h) => s + dist(h.hands[0][0], h.hands[0][9]), 0) / twoHandFrames.length;
+    const wristDists = twoHandFrames.map(h => dist(h.hands[0][0], h.hands[1][0]));
+    const avgWristDist = wristDists.reduce((a, b) => a + b, 0) / wristDists.length;
+    const clasped = (avgWristDist / avgHandSize) < 1.5;
+    if (!clasped) return false; // 有機會量到兩手距離，但距離太遠，代表不是互扣動作
+  }
+  // 如果整段都只偵測到單手（互扣時的常態），就不做距離檢查，直接靠手形+擺動判斷
 
-  // 擺動：合併中心點（兩手腕平均）的 y 座標方向要反覆改變
-  const centersY = validFrames.map(h => (h.hands[0][0].y + h.hands[1][0].y) / 2);
+  // 擺動：合併中心點（該幀所有偵測到的手的平均手腕位置）的 y 座標要反覆改變方向
+  const centerOf = (h) => {
+    const ys = h.hands.map(lm => lm[0].y);
+    return ys.reduce((a, b) => a + b, 0) / ys.length;
+  };
+  const centersY = validFrames.map(centerOf);
+
   const noiseThreshold = 0.003;
   let directionChanges = 0;
   let prevDir = null;
   for (let i = 1; i < centersY.length; i++) {
     const diff = centersY[i] - centersY[i - 1];
-    if (Math.abs(diff) < noiseThreshold) continue; // 忽略微小雜訊震動
+    if (Math.abs(diff) < noiseThreshold) continue;
     const dir = diff > 0 ? 1 : -1;
     if (prevDir !== null && dir !== prevDir) directionChanges++;
     prevDir = dir;
   }
 
-  return directionChanges >= 2; // 至少一上一下算一次完整擺動
+  return directionChanges >= 2;
 }
 
 // ── 統一檢查入口：依序檢查所有已定義的動態手勢 ──
