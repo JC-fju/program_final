@@ -71,6 +71,16 @@ function isFistShape(lm) {
       && lm[20].y > lm[18].y;
 }
 
+// 食指朝上（不要求完全打直，容許微彎鉤起），其餘三指彎（用於「抱歉」，食指觸額頭）
+function isIndexNearHeadShape(lm) {
+  const indexUp = lm[8].y < lm[6].y; // 食指尖比第二關節高，不論彎曲角度
+  const othersCurled =
+    lm[12].y > lm[10].y &&
+    lm[16].y > lm[14].y &&
+    lm[20].y > lm[18].y;
+  return indexUp && othersCurled;
+}
+
 // ── 「謝謝」動態判斷（單手）──
 // 動作特徵：拇指朝上手形，且手部（以手腕 lm[0] 為代表點）
 // 在近期時間窗口內「由下往上抬起，之後停留」
@@ -154,12 +164,61 @@ function isBaituoDynamic(history) {
   return directionChanges >= 2;
 }
 
+// ── 「抱歉」動態判斷（單手）──
+// 動作特徵：食指微彎手形，觸碰額頭側邊（位置很高，接近頭部），
+// 上升後停留一段時間再放下，跟「謝謝」結構類似但手形和停留位置不同
+function isBaoQianDynamic(history) {
+  if (history.length < MIN_SAMPLES) return false;
+  if (getHistoryTimeSpan() < WINDOW_MS * 0.8) return false;
+
+  const lms = history.map(h => h.hands && h.hands[0]).filter(Boolean);
+  if (lms.length < MIN_SAMPLES) return false;
+
+  const shapeMatchCount = lms.filter(isIndexNearHeadShape).length;
+  if (shapeMatchCount / lms.length < 0.6) return false;
+
+  const n = lms.length;
+  const earlySlice = lms.slice(0, Math.max(1, Math.floor(n * 0.3)));
+  const lateSlice  = lms.slice(Math.floor(n * 0.6));
+
+  // 用食指尖（碰觸額頭的接觸點）而非手腕，比較能代表「碰到頭部」這個動作的位置
+  const avgY = (slice) => slice.reduce((s, lm) => s + lm[8].y, 0) / slice.length;
+  const earlyY = avgY(earlySlice);
+  const lateY  = avgY(lateSlice);
+
+  const avgHandSize = lms.reduce((s, lm) => s + dist(lm[0], lm[9]), 0) / lms.length;
+  const riseRatio = (earlyY - lateY) / avgHandSize;
+  const roseUp = riseRatio > 0.3; // 上升幅度比「謝謝」略高，因為要舉到頭部而不是胸口
+
+  const lateYs = lateSlice.map(lm => lm[8].y);
+  const lateRange = (Math.max(...lateYs) - Math.min(...lateYs)) / avgHandSize;
+  const settled = lateRange < 0.15;
+
+  // 位置要夠高（接近額頭），用絕對座標門檻（畫面最上方為 0），
+  // 跟「謝謝」停在胸口的位置區分開來
+  const nearHead = lateY < 0.45;
+
+  return roseUp && settled && nearHead;
+}
+
 // ── 統一檢查入口：依序檢查所有已定義的動態手勢 ──
 // 之後新增動態詞彙，只要在這個陣列加一行即可
 const DYNAMIC_GESTURES = [
   { label: '謝謝', check: isXieXieDynamic },
   { label: '拜託', check: isBaituoDynamic },
+  { label: '抱歉', check: isBaoQianDynamic },
 ];
+
+// ── 給「靜態/動態合併判斷」用：這一幀的手形是否「疑似正在比某個動態手勢」──
+// 只要有任何一隻手符合任一動態手勢的候選手形，就回傳 true。
+// 用途：靜態辨識那邊看到這個為 true 時，會拉長確認所需時間，
+// 把時間讓給動態邏輯先判斷，避免像「謝謝」跟「十」手形相同時互搶。
+function isDynamicCandidateShape(handsArray) {
+  if (!handsArray || handsArray.length === 0) return false;
+  return handsArray.some(lm =>
+    isThumbUpShape(lm) || isFistShape(lm) || isIndexNearHeadShape(lm)
+  );
+}
 
 function checkDynamicGestures(history) {
   for (const g of DYNAMIC_GESTURES) {
